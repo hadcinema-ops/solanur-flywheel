@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flywheel Dashboard</title>
+  <style>
+    body{font-family:Inter,system-ui,Arial;margin:20px;max-width:900px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .card{border:1px solid #ddd;border-radius:10px;padding:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #ccc;cursor:pointer}
+  </style>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <h1>🔥 Fee → Buy → Burn Flywheel</h1>
+  <p>Public dashboard with verifiable on-chain links.</p>
+
+  <div class="row">
+    <button id="connectBtn">Connect (Phantom)</button>
+    <span class="card" id="statusBox">Status: <b id="statusTxt">—</b></span>
+    <span>Last run: <span id="lastRun">—</span></span>
+    <span id="controls" style="display:none">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn">Stop</button>
+    </span>
+  </div>
+
+  <div style="margin-top:20px">
+    <h3>Totals</h3>
+    <div class="row">
+      <div class="card"><div style="font-size:12px;color:#555">SOL Spent</div><div style="font-size:24px" id="totSol">0</div></div>
+      <div class="card"><div style="font-size:12px;color:#555">Tokens Bought (raw)</div><div style="font-size:24px" id="totBought">0</div></div>
+      <div class="card"><div style="font-size:12px;color:#555">Tokens Burned/Sent (raw)</div><div style="font-size:24px" id="totBurned">0</div></div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px">
+    <h3>Recent Runs</h3>
+    <table>
+      <thead><tr><th>Time</th><th>SOL Used</th><th>Tokens Bought (raw)</th><th>Tokens Burned/Sent (raw)</th><th>Swap Tx</th><th>Action Tx</th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table>
+  </div>
+
+<script>
+const BACKEND = window.BACKEND_BASE_URL;
+let allowedPubkey = null;
+
+async function refresh() {
+  const status = await fetch(BACKEND + '/api/public/status').then(r=>r.json());
+  const metrics = await fetch(BACKEND + '/api/public/metrics').then(r=>r.json());
+  document.getElementById('statusTxt').textContent = status.running ? 'RUNNING' : 'STOPPED';
+  document.getElementById('lastRun').textContent = status.lastRunAt || '—';
+  document.getElementById('totSol').textContent = (metrics.totals.solSpent||0).toFixed ? (metrics.totals.solSpent||0).toFixed(4) : metrics.totals.solSpent||0;
+  document.getElementById('totBought').textContent = metrics.totals.tokensBoughtRaw||'0';
+  document.getElementById('totBurned').textContent = metrics.totals.tokensBurnedRaw||'0';
+
+  const body = document.getElementById('histBody');
+  body.innerHTML = '';
+  (metrics.history||[]).forEach(h => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${h.time}</td>
+      <td>${h.solUsed}</td>
+      <td>${h.tokensBoughtRaw}</td>
+      <td>${h.tokensBurnedRaw}</td>
+      <td>${h.swapTx ? `<a target="_blank" href="https://solscan.io/tx/${h.swapTx}">view</a>` : '—'}</td>
+      <td>${h.actionTx ? `<a target="_blank" href="https://solscan.io/tx/${h.actionTx}">view</a>` : '—'}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+async function connectPhantom() {
+  if (!window.solana || !window.solana.isPhantom) { alert('Install Phantom'); return; }
+  const resp = await window.solana.connect();
+  const pubkey = resp.publicKey.toString();
+  // fetch allowed pubkey from backend status page by design? It's in env only; so we just show controls after backend validation
+  // We'll ask backend to verify when clicking Start/Stop via message signing.
+  document.getElementById('connectBtn').textContent = pubkey.slice(0,4)+'...'+pubkey.slice(-4);
+  window.__connectedPubkey = pubkey;
+  document.getElementById('controls').style.display = 'inline-block';
+}
+
+async function admin(kind){
+  const pubkey = window.__connectedPubkey;
+  if (!pubkey) return alert('Connect wallet first');
+  const msg = (kind.toUpperCase() + ' FLYWHEEL @ ' + new Date().toISOString());
+  const enc = new TextEncoder().encode(msg);
+  const signed = await window.solana.signMessage(enc, 'utf8');
+  const sigBase58 = signed.signature ? bs58encode(signed.signature) : null;
+  if (!sigBase58) return alert('Could not sign message');
+  const res = await fetch(BACKEND + '/api/admin/' + kind, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ pubkey, message: msg, signature: sigBase58 })
+  });
+  const js = await res.json();
+  if (!res.ok){ alert(js.error||'Error'); return; }
+  refresh();
+}
+
+// tiny bs58 encode (only needed for Phantom signMessage)
+function bs58encode(bytes) {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let x = BigInt('0x' + Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join(''));
+  let out = '';
+  while (x > 0) { const mod = x % 58n; x = x / 58n; out = ALPHABET[Number(mod)] + out; }
+  // handle leading zeros
+  for (const b of bytes) { if (b === 0) out = '1' + out; else break; }
+  return out || '1';
+}
+
+document.getElementById('connectBtn').onclick = connectPhantom;
+document.getElementById('startBtn').onclick = ()=>admin('start');
+document.getElementById('stopBtn').onclick = ()=>admin('stop');
+
+refresh();
+setInterval(refresh, 8000);
+</script>
+</body>
+</html>

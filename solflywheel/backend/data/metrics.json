@@ -1,0 +1,10 @@
+{
+  "running": false,
+  "lastRunAt": null,
+  "totals": {
+    "solSpent": 0,
+    "tokensBoughtRaw": "0",
+    "tokensBurnedRaw": "0"
+  },
+  "history": []
+}

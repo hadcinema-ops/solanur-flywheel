@@ -1,1 +1,22 @@
-{"name":"test"}
+{
+  "name": "flywheel-basic-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "@solana/web3.js": "^1.95.3",
+    "@solana/spl-token": "^0.4.6",
+    "@solana/spl-associated-token-account": "^2.0.1",
+    "bs58": "^5.0.0",
+    "tweetnacl": "^1.0.3",
+    "axios": "^1.7.2"
+  }
+}
